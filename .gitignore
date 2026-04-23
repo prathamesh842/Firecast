@@ -88,17 +88,18 @@ Thumbs.db
 *.temp
 *~
 
-# Large files (optional - uncomment if needed)
-# *.csv
-# *.h5
-# model/
+# Large CSV files (dataset is too large for GitHub)
+Wildfire_Dataset.csv
+*.csv
+data/all_predictions.csv
+
+# Model files (use Git LFS for these if needed)
+# *.h5 - uncomment if file is larger than 100MB
 
 # IDE-specific
 .vscode/settings.json
 .idea/
 
 # Application-specific
-# Exclude downloaded data but keep tracked data files
-# Uncomment if you have large downloads folder
-# downloads/
-# cache/
+downloads/
+cache/

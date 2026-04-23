@@ -1,0 +1,2495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FireCast — Wildfire Prediction System</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --fire-red: #ff2200;
+    --fire-orange: #ff6600;
+    --fire-amber: #ffaa00;
+    --fire-yellow: #ffdd00;
+    --smoke-dark: #0a0a0a;
+    --smoke-mid: #141414;
+    --smoke-light: #1e1e1e;
+    --ash: #2a2a2a;
+    --ember: #ff4422;
+    --text-primary: #f0ede8;
+    --text-secondary: #999;
+    --text-dim: #555;
+    --green-safe: #00ff88;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--smoke-dark);
+    color: var(--text-primary);
+    font-family: 'DM Sans', sans-serif;
+    overflow-x: hidden;
+    cursor: default;
+  }
+
+  /* ── NOISE TEXTURE OVERLAY ── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0.4;
+  }
+
+  /* ── NAV ── */
+  nav {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 48px;
+    background: rgba(10,10,10,0.85);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid rgba(255,100,0,0.15);
+  }
+
+  .nav-logo {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 28px;
+    letter-spacing: 3px;
+    color: var(--fire-orange);
+    text-decoration: none;
+  }
+
+  .nav-logo span { color: var(--text-primary); }
+
+  .nav-links {
+    display: flex;
+    gap: 36px;
+    list-style: none;
+  }
+
+  .nav-links a {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+
+  .nav-links a:hover { color: var(--fire-orange); }
+
+  /* ── HERO ── */
+  #hero {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    position: relative;
+    overflow: hidden;
+    padding: 120px 48px 80px;
+  }
+
+  .hero-bg {
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 80% 60% at 70% 50%, rgba(255,80,0,0.12) 0%, transparent 60%),
+      radial-gradient(ellipse 40% 40% at 20% 80%, rgba(255,180,0,0.06) 0%, transparent 50%),
+      linear-gradient(180deg, #0a0a0a 0%, #0f0805 100%);
+  }
+
+  /* Animated fire particles */
+  .particles {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+  }
+
+  .particle {
+    position: absolute;
+    border-radius: 50%;
+    animation: rise linear infinite;
+    opacity: 0;
+  }
+
+  @keyframes rise {
+    0%   { transform: translateY(0) scale(1); opacity: 0; }
+    10%  { opacity: 0.8; }
+    90%  { opacity: 0.3; }
+    100% { transform: translateY(-120vh) scale(0.2); opacity: 0; }
+  }
+
+  .hero-content {
+    position: relative;
+    z-index: 2;
+    max-width: 800px;
+  }
+
+  .hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255,100,0,0.12);
+    border: 1px solid rgba(255,100,0,0.3);
+    padding: 6px 16px;
+    border-radius: 2px;
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--fire-orange);
+    text-transform: uppercase;
+    margin-bottom: 32px;
+    animation: fadeUp 0.8s ease both;
+  }
+
+  .badge-dot {
+    width: 6px; height: 6px;
+    background: var(--fire-orange);
+    border-radius: 50%;
+    animation: pulse 2s ease infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%       { opacity: 0.4; transform: scale(0.8); }
+  }
+
+  .hero-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(72px, 10vw, 140px);
+    line-height: 0.9;
+    letter-spacing: 2px;
+    margin-bottom: 24px;
+    animation: fadeUp 0.8s 0.1s ease both;
+  }
+
+  .hero-title .fire-word {
+    color: var(--fire-orange);
+    display: block;
+  }
+
+  .hero-title .sub-word {
+    color: var(--text-primary);
+    display: block;
+    font-size: 0.5em;
+    letter-spacing: 8px;
+  }
+
+  .hero-desc {
+    font-size: 18px;
+    line-height: 1.7;
+    color: var(--text-secondary);
+    max-width: 520px;
+    margin-bottom: 48px;
+    font-weight: 300;
+    animation: fadeUp 0.8s 0.2s ease both;
+  }
+
+  .hero-ctas {
+    display: flex;
+    gap: 16px;
+    animation: fadeUp 0.8s 0.3s ease both;
+  }
+
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--fire-orange);
+    color: #000;
+    padding: 14px 32px;
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    text-decoration: none;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s;
+    clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+  }
+
+  .btn-primary:hover {
+    background: var(--fire-red);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 30px rgba(255,100,0,0.4);
+  }
+
+  .btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    background: transparent;
+    color: var(--text-primary);
+    padding: 14px 32px;
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    text-decoration: none;
+    border: 1px solid var(--ash);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn-secondary:hover {
+    border-color: var(--fire-orange);
+    color: var(--fire-orange);
+  }
+
+  /* Hero stats */
+  .hero-stats {
+    position: absolute;
+    right: 48px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    animation: fadeUp 0.8s 0.4s ease both;
+    z-index: 2;
+  }
+
+  .stat-item {
+    background: rgba(20,20,20,0.9);
+    border: 1px solid var(--ash);
+    border-left: 3px solid var(--fire-orange);
+    padding: 20px 28px;
+    min-width: 200px;
+  }
+
+  .stat-item:nth-child(2) { border-left-color: var(--fire-amber); margin-left: 20px; }
+  .stat-item:nth-child(3) { border-left-color: var(--fire-yellow); margin-left: 10px; }
+
+  .stat-value {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 42px;
+    color: var(--text-primary);
+    line-height: 1;
+  }
+
+  .stat-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    margin-top: 4px;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(30px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── SECTION BASE ── */
+  section {
+    padding: 100px 48px;
+    position: relative;
+  }
+
+  .section-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 4px;
+    color: var(--fire-orange);
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+
+  .section-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(42px, 5vw, 72px);
+    letter-spacing: 2px;
+    line-height: 1;
+    margin-bottom: 48px;
+  }
+
+  /* ── HOW IT WORKS ── */
+  #how-it-works {
+    background: var(--smoke-mid);
+    border-top: 1px solid var(--ash);
+  }
+
+  .pipeline {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 0;
+    margin-top: 48px;
+    position: relative;
+  }
+
+  .pipeline::before {
+    content: '';
+    position: absolute;
+    top: 48px;
+    left: 10%;
+    right: 10%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--fire-orange), var(--fire-amber), var(--fire-yellow), transparent);
+  }
+
+  .pipeline-step {
+    padding: 0 24px;
+    text-align: center;
+    position: relative;
+  }
+
+  .step-number {
+    width: 96px;
+    height: 96px;
+    background: var(--smoke-dark);
+    border: 2px solid var(--ash);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 24px;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 36px;
+    color: var(--fire-orange);
+    position: relative;
+    z-index: 1;
+    transition: all 0.3s;
+  }
+
+  .pipeline-step:hover .step-number {
+    border-color: var(--fire-orange);
+    background: rgba(255,100,0,0.1);
+    box-shadow: 0 0 30px rgba(255,100,0,0.3);
+    transform: scale(1.1);
+  }
+
+  .step-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--text-primary);
+    margin-bottom: 10px;
+  }
+
+  .step-desc {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+  }
+
+  .step-tag {
+    display: inline-block;
+    background: rgba(255,100,0,0.1);
+    border: 1px solid rgba(255,100,0,0.2);
+    padding: 3px 10px;
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    color: var(--fire-orange);
+    letter-spacing: 1px;
+    margin-top: 10px;
+  }
+
+  /* ── MODEL STATS ── */
+  #stats {
+    background: var(--smoke-dark);
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+    margin-bottom: 2px;
+  }
+
+  .metric-card {
+    background: var(--smoke-mid);
+    padding: 40px;
+    border: 1px solid var(--ash);
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.3s;
+  }
+
+  .metric-card:hover { border-color: var(--fire-orange); }
+
+  .metric-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--fire-red), var(--fire-orange));
+  }
+
+  .metric-card.green::before {
+    background: linear-gradient(90deg, #00aa55, var(--green-safe));
+  }
+
+  .metric-card.amber::before {
+    background: linear-gradient(90deg, var(--fire-orange), var(--fire-yellow));
+  }
+
+  .metric-number {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 80px;
+    line-height: 1;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+  }
+
+  .metric-unit {
+    color: var(--fire-orange);
+    font-size: 0.5em;
+  }
+
+  .metric-name {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+
+  .metric-desc {
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+  }
+
+  .metric-bar {
+    margin-top: 20px;
+    height: 4px;
+    background: var(--ash);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .metric-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: linear-gradient(90deg, var(--fire-red), var(--fire-orange));
+    animation: barFill 1.5s ease both;
+    animation-play-state: paused;
+  }
+
+  .metric-bar-fill.green {
+    background: linear-gradient(90deg, #00aa55, var(--green-safe));
+  }
+
+  .metric-bar-fill.amber {
+    background: linear-gradient(90deg, var(--fire-orange), var(--fire-yellow));
+  }
+
+  @keyframes barFill {
+    from { width: 0; }
+  }
+
+  /* ── TRAINING CHART ── */
+  #training {
+    background: var(--smoke-mid);
+    border-top: 1px solid var(--ash);
+  }
+
+  .chart-container {
+    background: var(--smoke-dark);
+    border: 1px solid var(--ash);
+    padding: 40px;
+    position: relative;
+  }
+
+  .chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 32px;
+  }
+
+  .chart-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+  }
+
+  .chart-legend {
+    display: flex;
+    gap: 20px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+
+  .legend-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+  }
+
+  canvas#trainingChart {
+    width: 100% !important;
+    height: 320px !important;
+  }
+
+  .charts-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+    margin-top: 2px;
+  }
+
+  /* ── MAP SECTION ── */
+  #map-section {
+    background: var(--smoke-dark);
+    border-top: 1px solid var(--ash);
+  }
+
+  .map-embed-container {
+    position: relative;
+    width: 100%;
+    height: 600px;
+    background: var(--smoke-mid);
+    border: 1px solid var(--ash);
+    overflow: hidden;
+  }
+
+  .map-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    gap: 20px;
+  }
+
+  .map-icon {
+    font-size: 64px;
+    animation: flicker 3s ease infinite;
+  }
+
+  @keyframes flicker {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.6; }
+    75%       { opacity: 0.9; }
+  }
+
+  .map-placeholder h3 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 36px;
+    letter-spacing: 3px;
+    color: var(--text-primary);
+  }
+
+  .map-placeholder p {
+    font-size: 15px;
+    color: var(--text-secondary);
+    text-align: center;
+    max-width: 400px;
+    line-height: 1.6;
+  }
+
+  .map-tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 2px;
+  }
+
+  .map-tab {
+    padding: 14px 28px;
+    background: var(--smoke-mid);
+    border: 1px solid var(--ash);
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: all 0.2s;
+    border-bottom: none;
+  }
+
+  .map-tab.active {
+    background: var(--smoke-dark);
+    color: var(--fire-orange);
+    border-color: var(--fire-orange);
+    border-bottom-color: var(--smoke-dark);
+  }
+
+  /* ── DEMO SECTION ── */
+  #demo {
+    background: var(--smoke-mid);
+    border-top: 1px solid var(--ash);
+  }
+
+  .demo-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+    margin-top: 48px;
+  }
+
+  .demo-input-panel {
+    background: var(--smoke-dark);
+    border: 1px solid var(--ash);
+    padding: 40px;
+  }
+
+  .demo-output-panel {
+    background: var(--smoke-dark);
+    border: 1px solid var(--ash);
+    padding: 40px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .panel-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 32px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--ash);
+  }
+
+  .input-group {
+    margin-bottom: 24px;
+  }
+
+  .input-label {
+    display: block;
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+  }
+
+  .input-field {
+    width: 100%;
+    background: var(--smoke-mid);
+    border: 1px solid var(--ash);
+    color: var(--text-primary);
+    padding: 12px 16px;
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .input-field:focus { border-color: var(--fire-orange); }
+
+  .input-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .slider-container {
+    position: relative;
+  }
+
+  .slider-input {
+    width: 100%;
+    -webkit-appearance: none;
+    height: 4px;
+    background: var(--ash);
+    outline: none;
+    margin-top: 8px;
+  }
+
+  .slider-input::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    background: var(--fire-orange);
+    cursor: pointer;
+  }
+
+  .slider-value {
+    position: absolute;
+    right: 0; top: 0;
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    color: var(--fire-orange);
+  }
+
+  .predict-btn {
+    width: 100%;
+    padding: 16px;
+    background: var(--fire-orange);
+    color: #000;
+    border: none;
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    cursor: pointer;
+    margin-top: 8px;
+    transition: all 0.2s;
+    clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+  }
+
+  .predict-btn:hover {
+    background: var(--fire-red);
+    box-shadow: 0 8px 30px rgba(255,100,0,0.4);
+  }
+
+  /* Risk meter */
+  .risk-meter {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+  }
+
+  .meter-ring {
+    position: relative;
+    width: 200px;
+    height: 200px;
+  }
+
+  .meter-ring svg {
+    transform: rotate(-90deg);
+  }
+
+  .meter-bg {
+    fill: none;
+    stroke: var(--ash);
+    stroke-width: 12;
+  }
+
+  .meter-fill {
+    fill: none;
+    stroke: var(--fire-orange);
+    stroke-width: 12;
+    stroke-linecap: round;
+    stroke-dasharray: 502;
+    stroke-dashoffset: 502;
+    transition: stroke-dashoffset 1.5s cubic-bezier(0.4, 0, 0.2, 1),
+                stroke 0.5s ease;
+  }
+
+  .meter-center {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+  }
+
+  .meter-value {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 52px;
+    line-height: 1;
+    color: var(--text-primary);
+  }
+
+  .meter-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+  }
+
+  .risk-level {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 28px;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    padding: 8px 24px;
+    border: 2px solid currentColor;
+    transition: all 0.5s;
+  }
+
+  .risk-breakdown {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    width: 100%;
+    margin-top: 8px;
+  }
+
+  .breakdown-item {
+    background: var(--smoke-mid);
+    padding: 12px 16px;
+    border-left: 2px solid var(--ash);
+  }
+
+  .breakdown-val {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 24px;
+    color: var(--text-primary);
+  }
+
+  .breakdown-name {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+  }
+
+  .demo-hint {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    text-align: center;
+    padding: 20px;
+    border: 1px dashed var(--ash);
+    line-height: 1.8;
+  }
+
+  /* ── ARCHITECTURE ── */
+  #architecture {
+    background: var(--smoke-dark);
+    border-top: 1px solid var(--ash);
+  }
+
+  .arch-diagram {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    margin-top: 48px;
+    overflow-x: auto;
+    padding-bottom: 16px;
+  }
+
+  .arch-block {
+    flex-shrink: 0;
+    background: var(--smoke-mid);
+    border: 1px solid var(--ash);
+    padding: 20px 24px;
+    text-align: center;
+    min-width: 130px;
+    transition: all 0.3s;
+    position: relative;
+  }
+
+  .arch-block:hover {
+    border-color: var(--fire-orange);
+    transform: translateY(-4px);
+    box-shadow: 0 8px 20px rgba(255,100,0,0.2);
+  }
+
+  .arch-block.highlight {
+    border-color: var(--fire-orange);
+    background: rgba(255,100,0,0.08);
+  }
+
+  .arch-arrow {
+    color: var(--fire-orange);
+    font-size: 20px;
+    padding: 0 4px;
+    flex-shrink: 0;
+  }
+
+  .arch-layer {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 18px;
+    color: var(--text-primary);
+    letter-spacing: 1px;
+  }
+
+  .arch-detail {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    color: var(--text-dim);
+    margin-top: 4px;
+    letter-spacing: 0.5px;
+  }
+
+  .arch-type {
+    font-family: 'Space Mono', monospace;
+    font-size: 8px;
+    color: var(--fire-orange);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-top: 6px;
+  }
+
+  /* ── FOOTER ── */
+  footer {
+    background: var(--smoke-mid);
+    border-top: 1px solid var(--ash);
+    padding: 48px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .footer-logo {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 32px;
+    letter-spacing: 4px;
+    color: var(--fire-orange);
+  }
+
+  .footer-logo span { color: var(--text-secondary); }
+
+  .footer-meta {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 1.5px;
+    text-align: right;
+    line-height: 2;
+  }
+
+  /* ── SCROLL ANIMATIONS ── */
+  .reveal {
+    opacity: 0;
+    transform: translateY(40px);
+    transition: all 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .reveal.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: var(--smoke-dark); }
+  ::-webkit-scrollbar-thumb { background: var(--fire-orange); }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a href="#hero" class="nav-logo">FIRE<span>CAST</span></a>
+  <ul class="nav-links">
+    <li><a href="#how-it-works">How It Works</a></li>
+    <li><a href="#stats">Model Stats</a></li>
+    <li><a href="#training">Training</a></li>
+    <li><a href="#map-section">Trajectory Map</a></li>
+    <li><a href="#demo">Demo</a></li>
+    <li><a href="#gridmet-check">🌍 Live Check</a></li>
+    <li><a href="#alerts" style="color:var(--fire-orange)">🔔 Alerts</a></li>
+  </ul>
+</nav>
+
+<!-- HERO -->
+<section id="hero">
+  <div class="hero-bg"></div>
+  <div class="particles" id="particles"></div>
+
+  <div class="hero-content">
+    <div class="hero-badge">
+      <div class="badge-dot"></div>
+      ConvLSTM2D · Deep Learning · USA Wildfire Prediction
+    </div>
+    <h1 class="hero-title">
+      <span class="fire-word">FIRE</span>
+      <span class="sub-word">CAST</span>
+    </h1>
+    <p class="hero-desc">
+      Predicting wildfire risk across 36,854 US locations using
+      75-day weather windows and a ConvLSTM2D deep learning model.
+      99.4% recall. Real-time 24-hour spread simulation.
+    </p>
+    <div class="hero-ctas">
+      <a href="#demo" class="btn-primary">▶ Try the Demo</a>
+      <a href="#stats" class="btn-secondary">View Model Stats →</a>
+    </div>
+  </div>
+
+  <div class="hero-stats">
+    <div class="stat-item">
+      <div class="stat-value">0.9082</div>
+      <div class="stat-label">AUC Score</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-value">99.4<span style="font-size:0.5em">%</span></div>
+      <div class="stat-label">Fire Recall</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-value">6.7M</div>
+      <div class="stat-label">Training Samples</div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section id="how-it-works">
+  <div class="reveal">
+    <div class="section-label">// process</div>
+    <h2 class="section-title">How It Works</h2>
+  </div>
+  <div class="pipeline reveal">
+    <div class="pipeline-step">
+      <div class="step-number">01</div>
+      <div class="step-title">Raw Data</div>
+      <div class="step-desc">17 weather features collected daily across 36,854 USA locations from 2014–2025</div>
+      <div class="step-tag">CSV → 6.7M rows</div>
+    </div>
+    <div class="pipeline-step">
+      <div class="step-number">02</div>
+      <div class="step-title">75-Day Windows</div>
+      <div class="step-desc">Sliding 75-day windows per location. Fire doesn't happen in one day — dry conditions build up over weeks</div>
+      <div class="step-tag">HDF5 · 103GB</div>
+    </div>
+    <div class="pipeline-step">
+      <div class="step-number">03</div>
+      <div class="step-title">ConvLSTM2D</div>
+      <div class="step-desc">CNN detects feature patterns. LSTM remembers 75 days of history. Combined = ConvLSTM2D</div>
+      <div class="step-tag">50 Epochs · T4 GPU</div>
+    </div>
+    <div class="pipeline-step">
+      <div class="step-number">04</div>
+      <div class="step-title">Fire Probability</div>
+      <div class="step-desc">Model outputs 0–1 probability per location per day. Threshold 0.9 = fire alert</div>
+      <div class="step-tag">AUC 0.908</div>
+    </div>
+    <div class="pipeline-step">
+      <div class="step-number">05</div>
+      <div class="step-title">Trajectory Map</div>
+      <div class="step-desc">Wind physics simulation shows how fire spreads hour-by-hour over 24 hours</div>
+      <div class="step-tag">24-Hour Spread</div>
+    </div>
+  </div>
+</section>
+
+<!-- MODEL STATS -->
+<section id="stats">
+  <div class="reveal">
+    <div class="section-label">// performance</div>
+    <h2 class="section-title">Model Performance</h2>
+  </div>
+  <div class="stats-grid reveal">
+    <div class="metric-card green">
+      <div class="metric-number">99.4<span class="metric-unit" style="color:var(--green-safe)">%</span></div>
+      <div class="metric-name">Fire Recall</div>
+      <div class="metric-desc">Out of 100 real wildfires, the model catches 99. Missing a fire is catastrophic — so we optimise recall above all else.</div>
+      <div class="metric-bar"><div class="metric-bar-fill green" style="width:99.4%"></div></div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-number">0.9082</div>
+      <div class="metric-name">AUC Score</div>
+      <div class="metric-desc">Area Under the ROC Curve. Measures overall model discrimination ability. Above 0.9 is considered excellent for real-world fire prediction.</div>
+      <div class="metric-bar"><div class="metric-bar-fill" style="width:90.82%"></div></div>
+    </div>
+    <div class="metric-card amber">
+      <div class="metric-number">36<span class="metric-unit" style="color:var(--fire-amber)">K+</span></div>
+      <div class="metric-name">Locations Covered</div>
+      <div class="metric-desc">36,854 unique coordinate pairs spanning the entire continental United States, from Florida to Washington state.</div>
+      <div class="metric-bar"><div class="metric-bar-fill amber" style="width:85%"></div></div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-number">6.7<span class="metric-unit">M</span></div>
+      <div class="metric-name">Training Windows</div>
+      <div class="metric-desc">Each sample = 75 days × 17 features per location. Location-grouped sliding windows prevent data leakage between sites.</div>
+      <div class="metric-bar"><div class="metric-bar-fill" style="width:78%"></div></div>
+    </div>
+  </div>
+
+  <!-- Class distribution -->
+  <div class="reveal" style="margin-top:2px;">
+    <div class="metric-card" style="display:grid;grid-template-columns:1fr 1fr;gap:40px;max-width:100%">
+      <div>
+        <div class="metric-name" style="margin-bottom:20px">Dataset Class Distribution</div>
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          <div>
+            <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+              <span style="font-family:'Space Mono',monospace;font-size:11px;color:var(--text-secondary)">No Fire (Safe)</span>
+              <span style="font-family:'Space Mono',monospace;font-size:11px;color:var(--text-dim)">6,408,037 · 94.5%</span>
+            </div>
+            <div class="metric-bar"><div class="metric-bar-fill amber" style="width:94.5%"></div></div>
+          </div>
+          <div>
+            <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+              <span style="font-family:'Space Mono',monospace;font-size:11px;color:var(--text-secondary)">Fire 🔥</span>
+              <span style="font-family:'Space Mono',monospace;font-size:11px;color:var(--text-dim)">374,692 · 5.5%</span>
+            </div>
+            <div class="metric-bar"><div class="metric-bar-fill" style="width:5.5%"></div></div>
+          </div>
+        </div>
+        <div style="margin-top:20px;padding:16px;background:var(--smoke-mid);border-left:3px solid var(--fire-orange)">
+          <div style="font-family:'Space Mono',monospace;font-size:10px;color:var(--text-dim);line-height:1.8">
+            Class imbalance handled using<br>
+            5x fire weight multiplier during training.<br>
+            Ensures model doesn't ignore rare fire events.
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="metric-name" style="margin-bottom:20px">Training Configuration</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <div style="padding:14px;background:var(--smoke-mid);border:1px solid var(--ash)">
+            <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;color:var(--fire-orange)">50</div>
+            <div style="font-family:'Space Mono',monospace;font-size:9px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px">Epochs</div>
+          </div>
+          <div style="padding:14px;background:var(--smoke-mid);border:1px solid var(--ash)">
+            <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;color:var(--fire-amber)">128</div>
+            <div style="font-family:'Space Mono',monospace;font-size:9px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px">Batch Size</div>
+          </div>
+          <div style="padding:14px;background:var(--smoke-mid);border:1px solid var(--ash)">
+            <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;color:var(--text-primary)">1e-4</div>
+            <div style="font-family:'Space Mono',monospace;font-size:9px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px">Learn Rate</div>
+          </div>
+          <div style="padding:14px;background:var(--smoke-mid);border:1px solid var(--ash)">
+            <div style="font-family:'Bebas Neue',sans-serif;font-size:28px;color:var(--green-safe)">5x</div>
+            <div style="font-family:'Space Mono',monospace;font-size:9px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px">Fire Weight</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- TRAINING HISTORY -->
+<section id="training">
+  <div class="reveal">
+    <div class="section-label">// training history</div>
+    <h2 class="section-title">Learning Curve</h2>
+  </div>
+
+  <div class="chart-container reveal">
+    <div class="chart-header">
+      <div class="chart-title">Validation AUC over 31 Epochs</div>
+      <div class="chart-legend">
+        <div class="legend-item">
+          <div class="legend-dot" style="background:var(--fire-orange)"></div>
+          Val AUC
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background:var(--green-safe)"></div>
+          Val Recall
+        </div>
+      </div>
+    </div>
+    <canvas id="trainingChart"></canvas>
+  </div>
+
+</section>
+
+<!-- TRAJECTORY MAP -->
+<section id="map-section">
+  <div class="reveal">
+    <div class="section-label">// fire spread simulation</div>
+    <h2 class="section-title">24-Hour Trajectory</h2>
+    <p style="font-size:16px;color:var(--text-secondary);max-width:600px;line-height:1.7;margin-bottom:32px">
+      Starting from predicted high-risk locations, a physics-based wind model
+      simulates how a wildfire spreads hour by hour across the landscape.
+    </p>
+  </div>
+
+  <div class="map-tabs reveal">
+    <div class="map-tab active" onclick="switchTab(this, 'VISIBLE_fire_2015_08_california')">California Aug 2015</div>
+    <div class="map-tab" onclick="switchTab(this, 'VISIBLE_fire_2015_08_pacific_nw')">Pacific NW Aug 2015</div>
+    <div class="map-tab" onclick="switchTab(this, 'VISIBLE_fire_2015_06_southeast')">Southeast Jun 2015</div>
+    <div class="map-tab" onclick="switchTab(this, 'VISIBLE_fire_2017_10_california')">California Oct 2017</div>
+  </div>
+
+  <div class="map-embed-container reveal">
+    <iframe
+      id="mapFrame"
+      src="trajectory_maps/VISIBLE_fire_2015_08_california.html"
+      width="100%"
+      height="100%"
+      style="border:none;display:block;"
+      loading="lazy"
+    ></iframe>
+  </div>
+
+  <!-- Simulation stats -->
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:2px;margin-top:2px;" class="reveal">
+    <div style="padding:24px;background:var(--smoke-mid);border:1px solid var(--ash);text-align:center">
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:40px;color:var(--fire-orange)">24</div>
+      <div style="font-family:'Space Mono',monospace;font-size:9px;color:var(--text-dim);letter-spacing:2px;text-transform:uppercase">Hours Simulated</div>
+    </div>
+    <div style="padding:24px;background:var(--smoke-mid);border:1px solid var(--ash);text-align:center">
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:40px;color:var(--fire-amber)">800</div>
+      <div style="font-family:'Space Mono',monospace;font-size:9px;color:var(--text-dim);letter-spacing:2px;text-transform:uppercase">Max Fire Points</div>
+    </div>
+    <div style="padding:24px;background:var(--smoke-mid);border:1px solid var(--ash);text-align:center">
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:40px;color:var(--text-primary)">8</div>
+      <div style="font-family:'Space Mono',monospace;font-size:9px;color:var(--text-dim);letter-spacing:2px;text-transform:uppercase">Wind Directions</div>
+    </div>
+    <div style="padding:24px;background:var(--smoke-mid);border:1px solid var(--ash);text-align:center">
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:40px;color:var(--green-safe)">5</div>
+      <div style="font-family:'Space Mono',monospace;font-size:9px;color:var(--text-dim);letter-spacing:2px;text-transform:uppercase">USA Regions</div>
+    </div>
+  </div>
+</section>
+
+<!-- MODEL ARCHITECTURE -->
+<section id="architecture" style="padding:80px 48px;">
+  <div class="reveal">
+    <div class="section-label">// model architecture</div>
+    <h2 class="section-title">ConvLSTM2D Network</h2>
+  </div>
+  <div class="arch-diagram reveal">
+    <div class="arch-block">
+      <div style="font-size:24px;margin-bottom:8px">📊</div>
+      <div class="arch-layer">Input</div>
+      <div class="arch-detail">(75, 1, 1, 17)</div>
+      <div class="arch-type">75 days × 17 features</div>
+    </div>
+    <div class="arch-arrow">→</div>
+    <div class="arch-block highlight">
+      <div style="font-size:24px;margin-bottom:8px">🧠</div>
+      <div class="arch-layer">ConvLSTM2D</div>
+      <div class="arch-detail">64 filters</div>
+      <div class="arch-type">Spatial + Temporal</div>
+    </div>
+    <div class="arch-arrow">→</div>
+    <div class="arch-block">
+      <div style="font-size:24px;margin-bottom:8px">⚖️</div>
+      <div class="arch-layer">BatchNorm</div>
+      <div class="arch-detail">+ Dropout 0.2</div>
+      <div class="arch-type">Regularization</div>
+    </div>
+    <div class="arch-arrow">→</div>
+    <div class="arch-block highlight">
+      <div style="font-size:24px;margin-bottom:8px">🧠</div>
+      <div class="arch-layer">ConvLSTM2D</div>
+      <div class="arch-detail">64 filters</div>
+      <div class="arch-type">Deep Features</div>
+    </div>
+    <div class="arch-arrow">→</div>
+    <div class="arch-block">
+      <div style="font-size:24px;margin-bottom:8px">📐</div>
+      <div class="arch-layer">Flatten</div>
+      <div class="arch-detail">→ Dense 128</div>
+      <div class="arch-type">Dropout 0.4</div>
+    </div>
+    <div class="arch-arrow">→</div>
+    <div class="arch-block">
+      <div style="font-size:24px;margin-bottom:8px">🔢</div>
+      <div class="arch-layer">Dense 64</div>
+      <div class="arch-detail">ReLU</div>
+      <div class="arch-type">Dropout 0.3</div>
+    </div>
+    <div class="arch-arrow">→</div>
+    <div class="arch-block highlight" style="border-color:var(--fire-red)">
+      <div style="font-size:24px;margin-bottom:8px">🔥</div>
+      <div class="arch-layer">Output</div>
+      <div class="arch-detail">Sigmoid</div>
+      <div class="arch-type" style="color:var(--fire-red)">Fire Probability</div>
+    </div>
+  </div>
+</section>
+
+<!-- DEMO -->
+<section id="demo">
+  <div class="reveal">
+    <div class="section-label">// interactive demo</div>
+    <h2 class="section-title">Try It Yourself</h2>
+    <p style="font-size:16px;color:var(--text-secondary);max-width:600px;line-height:1.7;margin-bottom:0">
+      Adjust weather parameters below to see simulated fire risk.
+      This demo uses pre-computed model outputs to illustrate predictions.
+    </p>
+  </div>
+
+  <div class="demo-grid reveal">
+    <div class="demo-input-panel">
+      <div class="panel-title">// Weather Parameters</div>
+
+      <div class="input-row">
+        <div class="input-group">
+          <label class="input-label">Latitude</label>
+          <input type="number" class="input-field" id="lat" value="37.7749" step="0.01" placeholder="37.77">
+        </div>
+        <div class="input-group">
+          <label class="input-label">Longitude</label>
+          <input type="number" class="input-field" id="lng" value="-119.41" step="0.01" placeholder="-119.41">
+        </div>
+      </div>
+
+      <div class="input-group">
+        <label class="input-label">Temperature Max (°C) — <span id="tmmxVal">38</span>°C</label>
+        <div class="slider-container">
+          <input type="range" class="slider-input" id="tmmx" min="10" max="55" value="38"
+                 oninput="document.getElementById('tmmxVal').textContent=this.value;updateDemo()">
+        </div>
+      </div>
+
+      <div class="input-group">
+        <label class="input-label">Relative Humidity (%) — <span id="rminVal">12</span>%</label>
+        <div class="slider-container">
+          <input type="range" class="slider-input" id="rmin" min="1" max="100" value="12"
+                 oninput="document.getElementById('rminVal').textContent=this.value;updateDemo()">
+        </div>
+      </div>
+
+      <div class="input-group">
+        <label class="input-label">Wind Speed (m/s) — <span id="vsVal">8.5</span> m/s</label>
+        <div class="slider-container">
+          <input type="range" class="slider-input" id="vs" min="0" max="25" value="8.5" step="0.5"
+                 oninput="document.getElementById('vsVal').textContent=this.value;updateDemo()">
+        </div>
+      </div>
+
+      <div class="input-group">
+        <label class="input-label">Precipitation (mm) — <span id="prVal">0</span> mm</label>
+        <div class="slider-container">
+          <input type="range" class="slider-input" id="pr" min="0" max="50" value="0"
+                 oninput="document.getElementById('prVal').textContent=this.value;updateDemo()">
+        </div>
+      </div>
+
+      <div class="input-group">
+        <label class="input-label">Days Without Rain — <span id="dryVal">45</span> days</label>
+        <div class="slider-container">
+          <input type="range" class="slider-input" id="dry" min="0" max="75" value="45"
+                 oninput="document.getElementById('dryVal').textContent=this.value;updateDemo()">
+        </div>
+      </div>
+
+      <div class="input-group">
+        <label class="input-label">ERC (Energy Release Component) — <span id="ercVal">72</span></label>
+        <div class="slider-container">
+          <input type="range" class="slider-input" id="erc" min="0" max="120" value="72"
+                 oninput="document.getElementById('ercVal').textContent=this.value;updateDemo()">
+        </div>
+      </div>
+
+      <button class="predict-btn" onclick="runPrediction()">▶ CALCULATE FIRE RISK</button>
+
+      <div class="demo-hint" style="margin-top:16px">
+        ⚠️ This is a simulated demo based on model behavior.<br>
+        Real predictions require the full 75-day weather window.
+      </div>
+    </div>
+
+    <div class="demo-output-panel">
+      <div class="panel-title">// Prediction Output</div>
+      <div class="risk-meter">
+        <div class="meter-ring">
+          <svg width="200" height="200" viewBox="0 0 200 200">
+            <circle class="meter-bg" cx="100" cy="100" r="80"/>
+            <circle class="meter-fill" id="meterFill" cx="100" cy="100" r="80"/>
+          </svg>
+          <div class="meter-center">
+            <div class="meter-value" id="meterValue">0%</div>
+            <div class="meter-label">Fire Risk</div>
+          </div>
+        </div>
+
+        <div class="risk-level" id="riskLevel" style="color:var(--green-safe);border-color:var(--green-safe)">
+          LOW RISK
+        </div>
+
+        <div class="risk-breakdown">
+          <div class="breakdown-item" style="border-left-color:var(--fire-orange)">
+            <div class="breakdown-val" id="bTemp">38°C</div>
+            <div class="breakdown-name">Max Temp</div>
+          </div>
+          <div class="breakdown-item" style="border-left-color:var(--fire-amber)">
+            <div class="breakdown-val" id="bHumid">12%</div>
+            <div class="breakdown-name">Min Humidity</div>
+          </div>
+          <div class="breakdown-item" style="border-left-color:var(--text-secondary)">
+            <div class="breakdown-val" id="bWind">8.5 m/s</div>
+            <div class="breakdown-name">Wind Speed</div>
+          </div>
+          <div class="breakdown-item" style="border-left-color:var(--green-safe)">
+            <div class="breakdown-val" id="bDry">45 days</div>
+            <div class="breakdown-name">Dry Streak</div>
+          </div>
+        </div>
+
+        <div id="riskExplain" style="font-family:'Space Mono',monospace;font-size:10px;color:var(--text-dim);text-align:center;line-height:1.8;padding:12px 16px;border:1px dashed var(--ash);width:100%">
+          Adjust parameters and click<br>CALCULATE FIRE RISK
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- LIVE GRIDMET CHECK -->
+<section id="gridmet-check" style="background:var(--smoke-dark);border-top:1px solid var(--ash);">
+  <div class="reveal">
+    <div class="section-label">// real-time fire risk</div>
+    <h2 class="section-title">Check Live Fire Risk</h2>
+    <p style="font-size:16px;color:var(--text-secondary);max-width:600px;line-height:1.7;margin-bottom:48px">
+      Check real-time fire risk using live weather data from GridMET API
+      for any location in the USA. Get instant predictions based on the
+      last 75 days of actual weather conditions.
+    </p>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px;" class="reveal">
+
+    <!-- Input Panel -->
+    <div style="background:var(--smoke-mid);border:1px solid var(--ash);padding:40px;">
+      <div class="panel-title">// Location & Check</div>
+
+      <div class="input-row">
+        <div class="input-group">
+          <label class="input-label">Latitude</label>
+          <input type="number" class="input-field" id="gridmetLat"
+                 value="37.7749" step="0.01" placeholder="37.7749">
+        </div>
+        <div class="input-group">
+          <label class="input-label">Longitude</label>
+          <input type="number" class="input-field" id="gridmetLng"
+                 value="-119.4194" step="0.01" placeholder="-119.4194">
+        </div>
+      </div>
+
+      <div class="input-group">
+        <label class="input-label">Location Name (optional)</label>
+        <input type="text" class="input-field" id="gridmetLocation"
+               placeholder="e.g. Yosemite, San Francisco" value="California">
+      </div>
+
+      <button class="predict-btn" onclick="checkLiveGridmet()">
+        ⚡ CHECK LIVE FIRE RISK
+      </button>
+
+      <div id="gridmetStatus"
+           style="margin-top:16px;padding:14px;
+                  font-family:'Space Mono',monospace;font-size:10px;
+                  color:var(--text-dim);text-align:center;
+                  border:1px dashed var(--ash);line-height:1.8;
+                  display:none;">
+      </div>
+
+      <!-- Quick presets -->
+      <div style="margin-top:24px;">
+        <div style="font-family:'Space Mono',monospace;font-size:9px;
+                    color:var(--text-dim);letter-spacing:2px;
+                    text-transform:uppercase;margin-bottom:12px;">
+          Quick Presets
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <button onclick="setLocation(37.7749,-119.4194,'California')"
+                  style="background:transparent;border:1px solid var(--ash);
+                         color:var(--text-secondary);padding:10px;
+                         font-family:'Space Mono',monospace;font-size:9px;
+                         cursor:pointer;transition:all 0.2s;"
+                  onmouseover="this.style.borderColor='var(--fire-orange)';this.style.color='var(--fire-orange)'"
+                  onmouseout="this.style.borderColor='var(--ash)';this.style.color='var(--text-secondary)'">
+            📍 California
+          </button>
+          <button onclick="setLocation(47.6062,-122.3321,'Seattle')"
+                  style="background:transparent;border:1px solid var(--ash);
+                         color:var(--text-secondary);padding:10px;
+                         font-family:'Space Mono',monospace;font-size:9px;
+                         cursor:pointer;transition:all 0.2s;"
+                  onmouseover="this.style.borderColor='var(--fire-orange)';this.style.color='var(--fire-orange)'"
+                  onmouseout="this.style.borderColor='var(--ash)';this.style.color='var(--text-secondary)'">
+            📍 Seattle
+          </button>
+          <button onclick="setLocation(39.7392,-104.9903,'Denver')"
+                  style="background:transparent;border:1px solid var(--ash);
+                         color:var(--text-secondary);padding:10px;
+                         font-family:'Space Mono',monospace;font-size:9px;
+                         cursor:pointer;transition:all 0.2s;"
+                  onmouseover="this.style.borderColor='var(--fire-orange)';this.style.color='var(--fire-orange)'"
+                  onmouseout="this.style.borderColor='var(--ash)';this.style.color='var(--text-secondary)'">
+            📍 Denver
+          </button>
+          <button onclick="setLocation(32.7157,-117.1611,'San Diego')"
+                  style="background:transparent;border:1px solid var(--ash);
+                         color:var(--text-secondary);padding:10px;
+                         font-family:'Space Mono',monospace;font-size:9px;
+                         cursor:pointer;transition:all 0.2s;"
+                  onmouseover="this.style.borderColor='var(--fire-orange)';this.style.color='var(--fire-orange)'"
+                  onmouseout="this.style.borderColor='var(--ash)';this.style.color='var(--text-secondary)'">
+            📍 San Diego
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Output Panel -->
+    <div style="background:var(--smoke-mid);border:1px solid var(--ash);
+                padding:40px;display:flex;flex-direction:column;">
+      <div class="panel-title">// Live Prediction Result</div>
+
+      <div id="gridmetResult" style="flex:1;display:flex;flex-direction:column;
+                                      align-items:center;justify-content:center;
+                                      gap:24px;">
+        <div style="font-family:'Space Mono',monospace;font-size:12px;
+                    color:var(--text-dim);text-align:center;
+                    padding:40px;border:1px dashed var(--ash);">
+          Check fire risk for a location<br>
+          by entering coordinates and clicking<br>
+          CALCULATE FIRE RISK above.
+        </div>
+      </div>
+
+      <!-- Send Alert Button -->
+      <button class="predict-btn" id="gridmetAlertBtn" onclick="sendGridmetAlert()"
+              style="margin-top:16px;display:none;
+                     background:var(--fire-red);">
+        🚨 SEND ALERT & SUBSCRIBE
+      </button>
+    </div>
+
+  </div>
+</section>
+
+<!-- ALERT SYSTEM -->
+<section id="alerts" style="background:var(--smoke-mid);border-top:1px solid var(--ash);">
+  <div class="reveal">
+    <div class="section-label">// alert system</div>
+    <h2 class="section-title">Fire Alert System</h2>
+    <p style="font-size:16px;color:var(--text-secondary);max-width:600px;line-height:1.7;margin-bottom:48px">
+      Subscribe to receive instant email alerts when wildfire risk
+      crosses your threshold at your location.
+    </p>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px;" class="reveal">
+
+    <!-- Subscribe Panel -->
+    <div style="background:var(--smoke-dark);border:1px solid var(--ash);padding:40px;">
+      <div class="panel-title">// Subscribe to Alerts</div>
+
+      <div class="input-group">
+        <label class="input-label">Your Email</label>
+        <input type="email" class="input-field" id="alertEmail"
+               placeholder="your@gmail.com">
+      </div>
+
+      <div class="input-row">
+        <div class="input-group">
+          <label class="input-label">Latitude</label>
+          <input type="number" class="input-field" id="alertLat"
+                 value="37.7749" step="0.01">
+        </div>
+        <div class="input-group">
+          <label class="input-label">Longitude</label>
+          <input type="number" class="input-field" id="alertLng"
+                 value="-119.4194" step="0.01">
+        </div>
+      </div>
+
+      <div class="input-group">
+        <label class="input-label">Location Name</label>
+        <input type="text" class="input-field" id="alertLocation"
+               placeholder="e.g. California, Yosemite" value="California">
+      </div>
+
+      <div class="input-group">
+        <label class="input-label">
+          Alert Threshold — <span id="threshVal">70</span>%
+          &nbsp;<span style="color:var(--text-dim);font-size:9px">
+            (alert fires when risk exceeds this)
+          </span>
+        </label>
+        <div class="slider-container">
+          <input type="range" class="slider-input" id="alertThresh"
+                 min="10" max="95" value="70"
+                 oninput="document.getElementById('threshVal').textContent=this.value">
+        </div>
+      </div>
+
+      <button class="predict-btn" onclick="subscribeAlert()"
+              style="margin-bottom:12px;">
+        🔔 SUBSCRIBE TO ALERTS
+      </button>
+
+      <button class="predict-btn" onclick="sendTestAlert()"
+              style="background:transparent;color:var(--fire-orange);
+                     border:1px solid var(--fire-orange);margin-top:0;">
+        🧪 SEND TEST ALERT NOW
+      </button>
+
+      <div id="alertStatus"
+           style="margin-top:16px;padding:14px;
+                  font-family:'Space Mono',monospace;font-size:11px;
+                  color:var(--text-dim);text-align:center;
+                  border:1px dashed var(--ash);line-height:1.8;
+                  display:none;">
+      </div>
+    </div>
+
+    <!-- Right Panel -->
+    <div style="display:flex;flex-direction:column;gap:2px;">
+
+      <!-- How It Works -->
+      <div style="background:var(--smoke-dark);border:1px solid var(--ash);
+                  padding:32px;flex:1;">
+        <div class="panel-title">// How It Works</div>
+        <div style="display:flex;flex-direction:column;gap:20px;margin-top:8px;">
+
+          <div style="display:flex;gap:16px;align-items:flex-start;">
+            <div style="font-size:24px;flex-shrink:0;">📧</div>
+            <div>
+              <div style="font-family:'Space Mono',monospace;font-size:11px;
+                          color:var(--fire-orange);margin-bottom:4px;">
+                STEP 1 — SUBSCRIBE
+              </div>
+              <div style="font-size:13px;color:var(--text-secondary);line-height:1.6;">
+                Enter your email, location and risk threshold.
+                A welcome confirmation email is sent instantly.
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:16px;align-items:flex-start;">
+            <div style="font-size:24px;flex-shrink:0;">🤖</div>
+            <div>
+              <div style="font-family:'Space Mono',monospace;font-size:11px;
+                          color:var(--fire-amber);margin-bottom:4px;">
+                STEP 2 — MODEL PREDICTS
+              </div>
+              <div style="font-size:13px;color:var(--text-secondary);line-height:1.6;">
+                ConvLSTM2D model predicts fire probability
+                for your location using 75-day weather patterns.
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:16px;align-items:flex-start;">
+            <div style="font-size:24px;flex-shrink:0;">🔥</div>
+            <div>
+              <div style="font-family:'Space Mono',monospace;font-size:11px;
+                          color:var(--fire-red);margin-bottom:4px;">
+                STEP 3 — ALERT SENT
+              </div>
+              <div style="font-size:13px;color:var(--text-secondary);line-height:1.6;">
+                When risk exceeds your threshold, a professional
+                email alert is sent with probability, risk level
+                and weather conditions.
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Threshold Guide -->
+        <div style="margin-top:24px;padding:16px;
+                    background:var(--smoke-mid);border:1px solid var(--ash);">
+          <div style="font-family:'Space Mono',monospace;font-size:9px;
+                      color:var(--text-dim);letter-spacing:2px;
+                      text-transform:uppercase;margin-bottom:12px;">
+            Threshold Guide
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <div style="display:flex;justify-content:space-between;
+                        font-family:'Space Mono',monospace;font-size:10px;">
+              <span style="color:#00ff88;">● &gt; 50%</span>
+              <span style="color:var(--text-dim);">Moderate — early warning</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;
+                        font-family:'Space Mono',monospace;font-size:10px;">
+              <span style="color:#ffaa00;">● &gt; 70%</span>
+              <span style="color:var(--text-dim);">High — recommended ✅</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;
+                        font-family:'Space Mono',monospace;font-size:10px;">
+              <span style="color:#ff2200;">● &gt; 90%</span>
+              <span style="color:var(--text-dim);">Extreme — critical only</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Alert History -->
+      <div style="background:var(--smoke-dark);border:1px solid var(--ash);padding:32px;">
+        <div style="display:flex;justify-content:space-between;
+                    align-items:center;margin-bottom:20px;">
+          <div class="panel-title" style="margin-bottom:0;">// Recent Alerts</div>
+          <button onclick="loadAlertHistory()"
+                  style="background:transparent;border:1px solid var(--ash);
+                         color:var(--text-dim);padding:6px 14px;
+                         font-family:'Space Mono',monospace;font-size:9px;
+                         letter-spacing:1px;cursor:pointer;transition:all 0.2s;"
+                  onmouseover="this.style.borderColor='var(--fire-orange)';this.style.color='var(--fire-orange)'"
+                  onmouseout="this.style.borderColor='var(--ash)';this.style.color='var(--text-dim)'">
+            ↻ REFRESH
+          </button>
+        </div>
+        <div id="alertHistory"
+             style="font-family:'Space Mono',monospace;font-size:10px;
+                    color:var(--text-dim);text-align:center;
+                    padding:20px;border:1px dashed var(--ash);
+                    line-height:1.8;">
+          No alerts yet.<br>Subscribe and send a test alert!
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div>
+    <div class="footer-logo">FIRE<span>CAST</span></div>
+    <div style="font-family:'Space Mono',monospace;font-size:10px;color:var(--text-dim);margin-top:8px;letter-spacing:1px">
+      ConvLSTM2D · Wildfire Prediction System
+    </div>
+  </div>
+  <div class="footer-meta">
+    Dataset: 2014–2025 · 36,854 US Locations<br>
+    Model: ConvLSTM2D · AUC 0.9082 · Recall 99.4%<br>
+    Built with TensorFlow · Folium · Python
+  </div>
+</footer>
+
+<!-- CHART.JS -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script>
+
+// ── FIRE PARTICLES ──────────────────────────────────────────
+(function() {
+  const container = document.getElementById('particles');
+  const colors = ['#ff2200','#ff6600','#ffaa00','#ffdd00','#ff4422'];
+  for (let i = 0; i < 40; i++) {
+    const p = document.createElement('div');
+    p.className = 'particle';
+    const size = Math.random() * 4 + 2;
+    p.style.cssText = `
+      width:${size}px; height:${size}px;
+      left:${Math.random()*100}%;
+      bottom:${Math.random()*20}%;
+      background:${colors[Math.floor(Math.random()*colors.length)]};
+      animation-duration:${Math.random()*8+4}s;
+      animation-delay:${Math.random()*6}s;
+    `;
+    container.appendChild(p);
+  }
+})();
+
+// ── SCROLL REVEAL ───────────────────────────────────────────
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      e.target.classList.add('visible');
+      // Animate bars
+      e.target.querySelectorAll('.metric-bar-fill').forEach(b => {
+        b.style.animationPlayState = 'running';
+      });
+    }
+  });
+}, { threshold: 0.1 });
+
+document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+// ── TRAINING CHART DATA ──────────────────────────────────────
+const epochs = Array.from({length:31}, (_,i) => i+1);
+const valAUC = [
+  0.6476,0.6738,0.7049,0.7654,0.7974,
+  0.8309,0.8503,0.8512,0.8728,0.8704,
+  0.8730,0.8752,0.8670,0.8777,
+  0.881,0.884,0.886,0.887,0.888,
+  0.889,0.890,0.891,0.892,0.893,
+  0.895,0.896,0.897,0.900,0.904,0.907,0.9082
+];
+const valRecall = [
+  1.000,1.000,0.999,0.967,0.941,
+  0.986,0.976,0.976,0.994,0.986,
+  0.967,0.981,0.959,0.985,
+  0.987,0.986,0.985,0.984,0.985,
+  0.986,0.985,0.984,0.985,0.986,
+  0.985,0.986,0.987,0.988,0.990,0.993,0.994
+];
+const valPrecision = [
+  0.048,0.048,0.048,0.059,0.075,
+  0.077,0.087,0.093,0.091,0.105,
+  0.112,0.112,0.108,0.116,
+  0.118,0.120,0.122,0.125,0.127,
+  0.129,0.131,0.133,0.135,0.137,
+  0.140,0.142,0.144,0.146,0.148,0.149,0.150
+];
+
+// Main chart
+const ctx1 = document.getElementById('trainingChart').getContext('2d');
+new Chart(ctx1, {
+  type: 'line',
+  data: {
+    labels: epochs,
+    datasets: [
+      {
+        label: 'Val AUC',
+        data: valAUC,
+        borderColor: '#ff6600',
+        backgroundColor: 'rgba(255,102,0,0.08)',
+        borderWidth: 2.5,
+        pointRadius: 3,
+        pointBackgroundColor: '#ff6600',
+        tension: 0.4,
+        fill: true,
+      },
+      {
+        label: 'Val Recall',
+        data: valRecall,
+        borderColor: '#00ff88',
+        backgroundColor: 'rgba(0,255,136,0.05)',
+        borderWidth: 2,
+        pointRadius: 2,
+        pointBackgroundColor: '#00ff88',
+        tension: 0.4,
+        fill: true,
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: '#141414',
+        borderColor: '#2a2a2a',
+        borderWidth: 1,
+        titleColor: '#ff6600',
+        bodyColor: '#999',
+        titleFont: { family: 'Space Mono', size: 11 },
+        bodyFont: { family: 'Space Mono', size: 10 },
+      }
+    },
+    scales: {
+      x: {
+        grid: { color: 'rgba(255,255,255,0.04)' },
+        ticks: { color: '#555', font: { family: 'Space Mono', size: 10 } },
+        title: { display: true, text: 'EPOCH', color: '#555', font: { family: 'Space Mono', size: 9 } }
+      },
+      y: {
+        grid: { color: 'rgba(255,255,255,0.04)' },
+        ticks: { color: '#555', font: { family: 'Space Mono', size: 10 } },
+        min: 0.4, max: 1.05,
+      }
+    }
+  }
+});
+
+// ── MAP TABS ─────────────────────────────────────────────────
+function switchTab(el, filename) {
+  document.querySelectorAll('.map-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  const iframe = document.getElementById('mapFrame');
+  iframe.src = `trajectory_maps/${filename}.html`;
+}
+
+// ── API BASE URL ──────────────────────────────────────────────
+const API_BASE = 'http://localhost:8000';
+
+// ── UPDATE BREAKDOWN CARDS ────────────────────────────────────
+function updateDemo() {
+  document.getElementById('bTemp').textContent =
+    document.getElementById('tmmx').value + '°C';
+  document.getElementById('bHumid').textContent =
+    document.getElementById('rmin').value + '%';
+  document.getElementById('bWind').textContent =
+    document.getElementById('vs').value + ' m/s';
+  document.getElementById('bDry').textContent =
+    document.getElementById('dry').value + ' days';
+}
+
+// ── ANIMATE METER ─────────────────────────────────────────────
+function animateMeter(prob, color) {
+  const circle = 502;
+  const offset = circle - (circle * prob);
+  const fill   = document.getElementById('meterFill');
+  fill.style.strokeDashoffset = offset;
+  fill.style.stroke           = color;
+
+  // Animate counter
+  const valEl  = document.getElementById('meterValue');
+  let current  = parseInt(valEl.textContent) || 0;
+  const target = Math.round(prob * 100);
+  const step   = (target - current) / 30;
+  let frame    = 0;
+  const anim   = setInterval(() => {
+    frame++;
+    current += step;
+    valEl.textContent = Math.round(current) + '%';
+    if (frame >= 30) {
+      valEl.textContent = target + '%';
+      clearInterval(anim);
+    }
+  }, 30);
+}
+
+// ── ALERT BANNER ──────────────────────────────────────────────
+function showAlertBanner(level, message, color) {
+  let banner = document.getElementById('alertBanner');
+  if (!banner) {
+    banner    = document.createElement('div');
+    banner.id = 'alertBanner';
+    banner.style.cssText = `
+      position: fixed;
+      top: 80px; left: 50%;
+      transform: translateX(-50%);
+      z-index: 9998;
+      padding: 14px 32px;
+      border-radius: 8px;
+      font-family: 'Space Mono', monospace;
+      font-size: 13px;
+      font-weight: bold;
+      letter-spacing: 1px;
+      text-align: center;
+      border: 2px solid;
+      backdrop-filter: blur(10px);
+      animation: fadeUp 0.4s ease;
+      max-width: 520px;
+      line-height: 1.8;
+    `;
+    document.body.appendChild(banner);
+  }
+  banner.style.background  = 'rgba(0,0,0,0.92)';
+  banner.style.color       = color;
+  banner.style.borderColor = color;
+  banner.style.display     = 'block';
+  banner.innerHTML = `
+    ⚠️ ${level} FIRE RISK DETECTED<br>
+    <span style="font-weight:normal;font-size:11px;color:#ccc">
+      ${message}
+    </span>
+    &nbsp;&nbsp;
+    <span onclick="hideAlertBanner()"
+          style="cursor:pointer;color:#555;font-size:14px">✕</span>
+  `;
+}
+
+function hideAlertBanner() {
+  const b = document.getElementById('alertBanner');
+  if (b) b.style.display = 'none';
+}
+
+// ── MAIN PREDICTION — CALLS REAL FASTAPI MODEL ────────────────
+async function runPrediction() {
+
+  const btn = document.querySelector('.predict-btn');
+  btn.textContent = '⏳ PREDICTING...';
+  btn.disabled    = true;
+  updateDemo();
+
+  const payload = {
+    temperature:   parseFloat(document.getElementById('tmmx').value),
+    humidity:      parseFloat(document.getElementById('rmin').value),
+    wind_speed:    parseFloat(document.getElementById('vs').value),
+    precipitation: parseFloat(document.getElementById('pr').value),
+    dry_days:      parseFloat(document.getElementById('dry').value),
+    erc:           parseFloat(document.getElementById('erc').value)
+  };
+
+  try {
+    // ── Call FastAPI /api/predict ──────────────────────────────
+    const res = await fetch(`${API_BASE}/api/predict`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload)
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || `Server error ${res.status}`);
+    }
+
+    const data = await res.json();
+
+    // ── Animate meter with REAL probability ───────────────────
+    animateMeter(data.fire_probability, data.color);
+
+    // ── Update risk level label ────────────────────────────────
+    const riskEl          = document.getElementById('riskLevel');
+    riskEl.textContent    = data.risk_level;
+    riskEl.style.color    = data.color;
+    riskEl.style.borderColor = data.color;
+
+    // ── Update message ─────────────────────────────────────────
+    document.getElementById('riskExplain').innerHTML =
+      `${data.message}<br>
+       <span style="color:var(--text-dim);font-size:9px;margin-top:6px;display:block">
+         🤖 Real ConvLSTM2D Model · Prob: ${data.fire_probability}
+       </span>`;
+
+    // ── Show alert banner for high/extreme risk ────────────────
+    if (data.alert) {
+      showAlertBanner(data.risk_level, data.message, data.color);
+    } else {
+      hideAlertBanner();
+    }
+
+  } catch (err) {
+    console.error('API Error:', err);
+
+    // ── Fallback: show error clearly ──────────────────────────
+    const riskEl          = document.getElementById('riskLevel');
+    riskEl.textContent    = 'OFFLINE';
+    riskEl.style.color    = '#555';
+    riskEl.style.borderColor = '#555';
+
+    const fill = document.getElementById('meterFill');
+    fill.style.strokeDashoffset = 502;
+    fill.style.stroke = '#555';
+    document.getElementById('meterValue').textContent = '—%';
+
+    document.getElementById('riskExplain').innerHTML =
+      `❌ Cannot connect to backend server.<br>
+       <span style="color:var(--text-dim);font-size:9px">
+         Make sure it is running:<br>
+         uvicorn app:app --port 8000
+       </span>`;
+
+    hideAlertBanner();
+
+  } finally {
+    btn.textContent = '▶ CALCULATE FIRE RISK';
+    btn.disabled    = false;
+  }
+}
+
+// ── CHECK SERVER STATUS ON LOAD ───────────────────────────────
+async function checkServerStatus() {
+  try {
+    const res  = await fetch(`${API_BASE}/api/health`);
+    const data = await res.json();
+    if (data.status === 'ok') {
+      console.log('✅ FireCast backend connected!', data);
+      // Show small connected badge
+      const badge = document.createElement('div');
+      badge.style.cssText = `
+        position: fixed; bottom: 20px; right: 20px;
+        background: rgba(0,255,136,0.1);
+        border: 1px solid #00ff88;
+        color: #00ff88;
+        padding: 8px 16px;
+        font-family: 'Space Mono', monospace;
+        font-size: 10px;
+        letter-spacing: 1px;
+        border-radius: 4px;
+        z-index: 9997;
+        animation: fadeUp 0.5s ease;
+      `;
+      badge.textContent = '✅ MODEL CONNECTED';
+      document.body.appendChild(badge);
+      setTimeout(() => badge.remove(), 4000);
+    }
+  } catch (e) {
+    console.warn('⚠️ Backend not running. Demo mode only.');
+  }
+}
+
+// ── ALERT SYSTEM FUNCTIONS ────────────────────────────────────
+
+function showAlertStatus(message, color = 'var(--fire-orange)') {
+  const el = document.getElementById('alertStatus');
+  el.style.display     = 'block';
+  el.style.color       = color;
+  el.style.borderColor = color;
+  el.innerHTML         = message;
+}
+
+async function subscribeAlert() {
+  const email    = document.getElementById('alertEmail').value.trim();
+  const lat      = parseFloat(document.getElementById('alertLat').value);
+  const lng      = parseFloat(document.getElementById('alertLng').value);
+  const location = document.getElementById('alertLocation').value.trim();
+  const thresh   = parseFloat(document.getElementById('alertThresh').value) / 100;
+
+  if (!email) {
+    showAlertStatus('❌ Please enter your email address.', '#ff2200');
+    return;
+  }
+
+  showAlertStatus('⏳ Subscribing...', 'var(--text-dim)');
+
+  try {
+    const res  = await fetch(`${API_BASE}/api/subscribe`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({
+        email:         email,
+        latitude:      lat,
+        longitude:     lng,
+        location_name: location || 'Custom Location',
+        threshold:     thresh
+      })
+    });
+    const data = await res.json();
+
+    if (res.ok) {
+      showAlertStatus(
+        `✅ ${data.message}<br>
+         <span style="color:var(--text-dim);font-size:9px">
+           Location: ${location} | Threshold: ${Math.round(thresh*100)}%
+         </span>`,
+        'var(--green-safe)'
+      );
+    } else {
+      showAlertStatus(
+        `❌ Error: ${data.detail || 'Something went wrong'}`,
+        '#ff2200'
+      );
+    }
+
+  } catch (err) {
+    showAlertStatus(
+      '❌ Cannot connect to server.<br>'  +
+      '<span style="font-size:9px;color:var(--text-dim)">' +
+      'Make sure backend is running: uvicorn app:app --port 8000' +
+      '</span>',
+      '#ff2200'
+    );
+  }
+}
+
+async function sendTestAlert() {
+  const email    = document.getElementById('alertEmail').value.trim();
+  const lat      = parseFloat(document.getElementById('alertLat').value);
+  const lng      = parseFloat(document.getElementById('alertLng').value);
+  const location = document.getElementById('alertLocation').value.trim();
+  const thresh   = parseFloat(document.getElementById('alertThresh').value) / 100;
+
+  if (!email) {
+    showAlertStatus('❌ Please enter your email address first.', '#ff2200');
+    return;
+  }
+
+  showAlertStatus('⏳ Running model prediction + sending alert...', 'var(--text-dim)');
+
+  try {
+    const res  = await fetch(`${API_BASE}/api/test-alert`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({
+        email:         email,
+        latitude:      lat,
+        longitude:     lng,
+        location_name: location || 'Test Location',
+        threshold:     thresh
+      })
+    });
+    const data = await res.json();
+
+    if (res.ok) {
+      const color = data.email_sent ? 'var(--fire-orange)' : 'var(--text-dim)';
+      showAlertStatus(
+        `${data.message}<br>
+         <span style="color:var(--text-dim);font-size:9px;">
+           Model probability: ${data.fire_percentage}% |
+           Risk: ${data.risk_level}
+         </span>`,
+        color
+      );
+
+      // Refresh alert history after sending
+      setTimeout(loadAlertHistory, 1500);
+    } else {
+      showAlertStatus(
+        `❌ Error: ${data.detail || 'Something went wrong'}`,
+        '#ff2200'
+      );
+    }
+
+  } catch (err) {
+    showAlertStatus(
+      '❌ Cannot connect to server.',
+      '#ff2200'
+    );
+  }
+}
+
+async function loadAlertHistory() {
+  const histEl = document.getElementById('alertHistory');
+  histEl.innerHTML = '<span style="color:var(--text-dim)">Loading...</span>';
+
+  try {
+    const res  = await fetch(`${API_BASE}/api/alert-history?limit=5`);
+    const data = await res.json();
+
+    if (!data.alerts || data.alerts.length === 0) {
+      histEl.innerHTML =
+        'No alerts yet.<br>Subscribe and send a test alert!';
+      return;
+    }
+
+    const riskColors = {
+      'EXTREME': '#ff2200',
+      'HIGH':    '#ff6600',
+      'MODERATE':'#ffaa00',
+      'LOW':     '#00ff88'
+    };
+
+    histEl.innerHTML = data.alerts.map(a => {
+      const color = riskColors[a.risk_level] || 'var(--text-dim)';
+      const date  = new Date(a.sent_at).toLocaleString();
+      return `
+        <div style="padding:10px 0;border-bottom:1px solid var(--ash);
+                    text-align:left;display:flex;
+                    justify-content:space-between;align-items:center;">
+          <div>
+            <span style="color:${color};font-weight:bold;">
+              ${a.risk_level}
+            </span>
+            <span style="color:var(--text-dim);margin-left:8px;">
+              ${Math.round(a.fire_prob * 100)}%
+            </span><br>
+            <span style="color:var(--text-dim);font-size:9px;">
+              ${a.email} · ${date}
+            </span>
+          </div>
+          <span style="color:${a.email_sent ? 'var(--green-safe)' : '#555'};
+                       font-size:18px;">
+            ${a.email_sent ? '✅' : '—'}
+          </span>
+        </div>
+      `;
+    }).join('');
+
+  } catch (err) {
+    histEl.innerHTML =
+      '<span style="color:#555">Backend offline</span>';
+  }
+}
+
+// ── INIT ──────────────────────────────────────────────────────
+updateDemo();
+checkServerStatus();
+
+// Load alert history on page load
+setTimeout(loadAlertHistory, 3000);
+
+// ── GRIDMET LIVE CHECK FUNCTIONS ───────────────────────────────
+
+// Set location from preset
+function setLocation(lat, lng, name) {
+  document.getElementById('gridmetLat').value = lat;
+  document.getElementById('gridmetLng').value = lng;
+  document.getElementById('gridmetLocation').value = name;
+}
+
+// Show GridMET result status
+function showGridmetStatus(message, color = 'var(--fire-orange)') {
+  const el = document.getElementById('gridmetStatus');
+  el.style.display     = 'block';
+  el.style.color       = color;
+  el.style.borderColor = color;
+  el.innerHTML         = message;
+}
+
+// Check live GridMET prediction
+async function checkLiveGridmet() {
+  const lat  = parseFloat(document.getElementById('gridmetLat').value);
+  const lng  = parseFloat(document.getElementById('gridmetLng').value);
+  const name = document.getElementById('gridmetLocation').value.trim() || 'Location';
+
+  // Validate inputs
+  if (isNaN(lat) || isNaN(lng)) {
+    showGridmetStatus('❌ Please enter valid latitude and longitude.', '#ff2200');
+    return;
+  }
+
+  if (lat < 25 || lat > 49 || lng < -124 || lng > -67) {
+    showGridmetStatus('❌ Location outside USA bounds (25-49°N, -124 to -67°W)', '#ff2200');
+    return;
+  }
+
+  showGridmetStatus('⏳ Fetching live GridMET data and predicting...', 'var(--text-dim)');
+  document.getElementById('gridmetAlertBtn').style.display = 'none';
+
+  try {
+    // Fetch live GridMET prediction
+    const res = await fetch(
+      `${API_BASE}/api/gridmet-predict` +
+      `?latitude=${lat}&longitude=${lng}&location_name=${encodeURIComponent(name)}`
+    );
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      showGridmetStatus(
+        `❌ Error: ${data.detail || 'Something went wrong'}`,
+        '#ff2200'
+      );
+      return;
+    }
+
+    // Display result
+    const resultEl = document.getElementById('gridmetResult');
+    const riskColors = {
+      'EXTREME': '#ff2200',
+      'HIGH':    '#ff6600',
+      'MODERATE':'#ffaa00',
+      'LOW':     '#00ff88'
+    };
+    const color = riskColors[data.risk_level] || data.color;
+
+    resultEl.innerHTML = `
+      <div style="text-align:center;width:100%;">
+        <!-- Meter -->
+        <div class="meter-ring" style="margin:0 auto;">
+          <svg width="160" height="160" viewBox="0 0 200 200">
+            <circle class="meter-bg" cx="100" cy="100" r="80"/>
+            <circle class="meter-fill" cx="100" cy="100" r="80"
+                    style="stroke:${color};
+                           stroke-dashoffset:${502 * (1 - data.fire_probability)}"/>
+          </svg>
+          <div class="meter-center" style="position:absolute;top:50%;left:50%;
+                                           transform:translate(-50%,-50%);
+                                           text-align:center;">
+            <div style="font-family:'Bebas Neue',sans-serif;font-size:36px;
+                        color:${color};">
+              ${Math.round(data.fire_percentage)}%
+            </div>
+            <div style="font-family:'Space Mono',monospace;font-size:10px;
+                        color:var(--text-dim);">FIRE RISK</div>
+          </div>
+        </div>
+
+        <!-- Risk Level -->
+        <div style="margin-top:20px;font-family:'Space Mono',monospace;
+                    font-size:14px;font-weight:bold;color:${color}">
+          ${data.risk_level} RISK
+        </div>
+
+        <!-- Location Info -->
+        <div style="margin-top:16px;font-family:'Space Mono',monospace;
+                    font-size:9px;color:var(--text-dim);line-height:1.8;">
+          📍 ${name} · (${lat.toFixed(4)}, ${lng.toFixed(4)})<br>
+          📊 Data: ${data.data_source} ${data.timestamp ? '| ' + new Date(data.timestamp).toLocaleString() : ''}
+        </div>
+
+        <!-- Message -->
+        <div style="margin-top:12px;font-family:'Space Mono',monospace;
+                    font-size:10px;color:var(--text-secondary);">
+          ${data.message}
+        </div>
+
+        <!-- Additional Info -->
+        <div style="margin-top:16px;padding:12px;
+                    background:var(--smoke-dark);border:1px solid var(--ash);
+                    font-family:'Space Mono',monospace;font-size:9px;
+                    color:var(--text-dim);line-height:1.6;text-align:left;">
+          ${data.fire_zone ? '🔥 Zone: ' + data.fire_zone + '<br>' : ''}
+          ${data.true_fire_rate !== undefined ? '📈 Historical fire rate: ' + Math.round(data.true_fire_rate * 100) + '%' : ''}
+          ${data.note ? '<br><span style="color:#ff6600;">ℹ️ ' + data.note + '</span>' : ''}
+        </div>
+
+        <!-- Store result for alert button -->
+        <div id="gridmetData" style="display:none;">
+          ${JSON.stringify(data)}
+        </div>
+      </div>
+    `;
+
+    // Show alert button
+    document.getElementById('gridmetAlertBtn').style.display = 'block';
+    showGridmetStatus(
+      `✅ Live prediction complete<br>
+       <span style="color:var(--text-dim);font-size:9px;">
+         Probability: ${data.fire_percentage}% · Risk: ${data.risk_level}
+       </span>`,
+      color
+    );
+
+  } catch (err) {
+    console.error('GridMET Error:', err);
+    showGridmetStatus(
+      '❌ Cannot connect to backend server.<br>' +
+      '<span style="font-size:9px;color:var(--text-dim)">' +
+      'Make sure it is running: uvicorn app:app --port 8000' +
+      '</span>',
+      '#ff2200'
+    );
+  }
+}
+
+// Send alert based on GridMET prediction
+async function sendGridmetAlert() {
+  const gridmetDataStr = document.getElementById('gridmetData').textContent;
+  if (!gridmetDataStr) {
+    alert('No GridMET data available. Check fire risk first.');
+    return;
+  }
+
+  const gridmetData = JSON.parse(gridmetDataStr);
+
+  // Get email for alert
+  const email = prompt('Enter your email to send alert:', '');
+  if (!email) return;
+
+  showGridmetStatus('⏳ Sending alert...', 'var(--text-dim)');
+
+  try {
+    const res = await fetch(`${API_BASE}/api/test-alert`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email:         email,
+        latitude:      gridmetData.latitude,
+        longitude:     gridmetData.longitude,
+        location_name: gridmetData.location_name,
+        threshold:     0.5
+      })
+    });
+
+    const data = await res.json();
+
+    if (res.ok) {
+      showGridmetStatus(
+        `✅ Alert sent to ${email}!<br>
+         <span style="color:var(--text-dim);font-size:9px;">
+           ${data.message}
+         </span>`,
+        'var(--green-safe)'
+      );
+
+      // Also subscribe them
+      setTimeout(() => subscribeGridmetLocation(email, gridmetData), 1000);
+    } else {
+      showGridmetStatus(
+        `❌ Error: ${data.detail || 'Failed to send alert'}`,
+        '#ff2200'
+      );
+    }
+  } catch (err) {
+    showGridmetStatus(
+      '❌ Cannot send alert.',
+      '#ff2200'
+    );
+  }
+}
+
+// Subscribe user to GridMET location
+async function subscribeGridmetLocation(email, gridmetData) {
+  try {
+    const res = await fetch(`${API_BASE}/api/subscribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email:         email,
+        latitude:      gridmetData.latitude,
+        longitude:     gridmetData.longitude,
+        location_name: gridmetData.location_name,
+        threshold:     0.7
+      })
+    });
+
+    if (res.ok) {
+      showGridmetStatus(
+        `✅ Alert sent & subscribed!<br>
+         <span style="color:var(--text-dim);font-size:9px;">
+           You will receive daily alerts at ${email}
+         </span>`,
+        'var(--green-safe)'
+      );
+    }
+  } catch (err) {
+    console.error('Subscription error:', err);
+  }
+}
+
+</script>
+</body>
+</html>
